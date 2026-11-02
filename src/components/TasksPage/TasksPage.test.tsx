@@ -96,3 +96,12 @@ it('filters by task name and reported status while retaining compact details', a
   expect(container.querySelectorAll('article')).toHaveLength(0);
   expect(container.textContent).toContain('条件に一致するタスクはありません');
 });
+
+it('shows all known sessions while no current session is selected', async () => {
+  mock.mockResolvedValue({ ...empty, tasks: [{ id: 'task-a', parentTaskId: null, title: 'Synthetic task', status: 'unknown', stage: null, summary: null, acceptance: null, updatedAt: null, freshness: 'unknown' }],
+    executions: [{ id: 'run-a', taskId: 'task-a', sessionId: null, sessionIds: ['session-a', 'session-b'], tool: 'unknown', model: null, modelBasis: 'unknown', provider: null, host: null, status: 'unknown', statusBasis: 'unknown', startedAt: null, updatedAt: null, freshness: 'unknown' }],
+    sessions: [{ id: 'session-a', tool: 'codex', host: null, updatedAt: null, freshness: 'unknown', linked: true }, { id: 'session-b', tool: 'claude-code', host: null, updatedAt: null, freshness: 'unknown', linked: true }] });
+  const { container } = render(<TasksPage />); await flush();
+  expect(container.textContent).toContain('関連セッション: session-a, session-b');
+  expect(container.textContent).toContain('未ひも付けセッション（0）');
+});

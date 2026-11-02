@@ -7,7 +7,7 @@ export interface VisibleTask extends Updated {
   stage: string | null; summary: string | null; acceptance: { completed: number; total: number } | null;
 }
 export interface TaskExecution extends Updated {
-  id: string; taskId: string; sessionId: string | null; tool: TaskTool;
+  id: string; taskId: string; sessionId: string | null; sessionIds?: string[]; tool: TaskTool;
   model: string | null; modelBasis: 'reported' | 'configured' | 'unknown';
   provider: string | null; host: string | null; status: TaskStatus;
   statusBasis: 'reported' | 'observed' | 'recorded' | 'unknown'; startedAt: string | null;

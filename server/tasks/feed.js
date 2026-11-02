@@ -9,8 +9,8 @@ const TOOLS = ['codex', 'claude-code', 'local-llm', 'other', 'unknown'];
 const STATUSES = ['queued', 'running', 'blocked', 'completed', 'failed', 'cancelled', 'unknown'];
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const invalid = () => { throw new Error('Invalid task feed'); };
-function object(value, keys) {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(k => !keys.includes(k)) || keys.some(k => !Object.hasOwn(value, k))) invalid();
+function object(value, keys, optional = []) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(k => !keys.includes(k) && !optional.includes(k)) || keys.some(k => !Object.hasOwn(value, k))) invalid();
 }
 function text(value, max = 160) {
   if (typeof value !== 'string' || !value.trim() || value.length > max || /[\u0000-\u001f\u007f]/u.test(value)) invalid();
@@ -79,17 +79,19 @@ export function projectFeed(feed, now = Date.now()) {
   });
   const sessionIds = unique(sessions);
   const executions = rows(feed.executions, 1000).map(row => {
-    object(row, ['id', 'taskId', 'sessionId', 'tool', 'model', 'modelBasis', 'providerRef', 'hostRef', 'status', 'statusBasis', 'startedAt', 'updatedAt']);
+    object(row, ['id', 'taskId', 'sessionId', 'tool', 'model', 'modelBasis', 'providerRef', 'hostRef', 'status', 'statusBasis', 'startedAt', 'updatedAt'], ['sessionIds']);
     if (!taskIds.has(row.taskId) || (row.sessionId !== null && !sessionIds.has(row.sessionId))) invalid();
+    const relatedSessions = Object.hasOwn(row, 'sessionIds') ? rows(row.sessionIds) : row.sessionId === null ? [] : [row.sessionId];
+    if (new Set(relatedSessions).size !== relatedSessions.length || relatedSessions.some(sid => !sessionIds.has(sid)) || row.sessionId !== (relatedSessions.length === 1 ? relatedSessions[0] : null)) invalid();
     const updatedAt = timestamp(row.updatedAt, now), startedAt = timestamp(row.startedAt, now);
     if (updatedAt !== null && startedAt !== null && Date.parse(updatedAt) < Date.parse(startedAt)) invalid();
     const modelBasis = choice(row.modelBasis, ['reported', 'configured', 'unknown']);
     const statusBasis = choice(row.statusBasis, ['reported', 'observed', 'recorded', 'unknown']);
     if ((row.model === null) !== (modelBasis === 'unknown') || (row.status === 'unknown') !== (statusBasis === 'unknown')) invalid();
-    return { id: id(row.id), taskId: row.taskId, sessionId: row.sessionId, tool: choice(row.tool, TOOLS), model: nullable(row.model, v => text(v)), modelBasis, provider: alias(row.providerRef, providers), host: alias(row.hostRef, hosts), status: choice(row.status, STATUSES), statusBasis, startedAt, updatedAt, freshness: freshness(updatedAt, now) };
+    return { id: id(row.id), taskId: row.taskId, sessionId: row.sessionId, sessionIds: [...relatedSessions], tool: choice(row.tool, TOOLS), model: nullable(row.model, v => text(v)), modelBasis, provider: alias(row.providerRef, providers), host: alias(row.hostRef, hosts), status: choice(row.status, STATUSES), statusBasis, startedAt, updatedAt, freshness: freshness(updatedAt, now) };
   });
   unique(executions);
-  const linked = new Set(executions.map(e => e.sessionId));
+  const linked = new Set(executions.flatMap(e => e.sessionIds));
   for (const session of sessions) session.linked = linked.has(session.id);
   return { state: freshness(generatedAt, now) === 'stale' ? 'stale' : 'ready', generatedAt, coverage, tasks, executions, sessions };
 }

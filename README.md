@@ -1360,7 +1360,7 @@ Codex / Claude Code / Local LLMなどのタスク、親子関係、実行履歴�
 
 ### feed v1契約
 
-全キーは必須です。不明は`null`または列挙値`unknown`にします。未定義のキーが1つでもあればfeed全体を拒否します。
+`executions[].sessionIds`以外の全キーは必須です。不明は`null`または列挙値`unknown`にします。未定義のキーが1つでもあればfeed全体を拒否します。
 `displayApproved: true`は、**全表示値を監視画面に出すことを送信側が審査・明示許可した宣言**です。
 この宣言自体は秘密検知器ではありません。任意の秘密が通常のタスク名、モデル名、ID、summaryとして入ることをregexで完全検出することはできません。
 providerは自由文を自動転載せず、承認したtitle/summary/stage/modelの値だけを選択してください。
@@ -1400,7 +1400,8 @@ providerは自由文を自動転載せず、承認したtitle/summary/stage/mode
 - `status`: `queued | running | blocked | completed | failed | cancelled | unknown`。タスク状態はproviderの明示報告です。summaryや会話から推測した状態は送信しません。
 - `modelBasis`: `reported | configured | unknown`。実行元が使用モデルを明示報告した場合だけ`reported`、設定しか分からない場合は`configured`。modelが`null`ならbasisは`unknown`（逆も同じ）です。
 - `statusBasis`: `reported | observed | recorded | unknown`。状態が`unknown`ならbasisも`unknown`（逆も同じ）。保存された記録だけなら`recorded`で、生存を推定しません。
-- task IDとexecution IDは別です。モデル切替・retry・実行元変更ごとに新しいexecution IDを付け、過去の実行をfeed内に保持します。このダッシュボード自身は履歴を永続化しません。sessionsの存在だけでtaskを生成しません。
+- task IDとexecution IDは別です。実行元が新しいExecution/attemptとして確認したモデル切替・retry・実行元変更には新しいexecution IDを付け、過去の実行をfeed内に保持します。同じExecution内の複数モデルやSessionを、架空の新Executionへ変換しません。一意に確認できないモデルはnull/unknownです。このダッシュボード自身は履歴を永続化しません。sessionsの存在だけでtaskを生成しません。
+- executionの任意項目`sessionIds`は、同じExecutionに関連する全Session IDの配列です（最大500、重複・未解決参照は禁止）。順序から現在のSessionを推測しません。配列が1件なら`sessionId`はそのID、0件または複数なら`sessionId:null`にします。旧producerが配列を省略した場合は`sessionId`から0〜1件を補います。複数Sessionの既知関係は未ひも付け扱いにしません。
 - taskの`parentTaskId`、executionの`sessionId`は`null`可。その他の参照は同じfeed内の実在IDが必要です。親子循環・重複ID・未解決参照は拒否します。IDと別名キーは1～64文字の英数字・`_`・`-`（先頭は英数字）です。
 - `title`/`model`は最大160文字、`stage`は80文字、`summary`は500文字、別名は100文字。空文字・制御文字は拒否します。stage/summary/model/providerRef/hostRefは`null`可です。
 - `acceptance`は`null`、または`0 <= completed <= total <= 10000`の整数（totalは1以上）。完了数からtask状態を自動変更しません。

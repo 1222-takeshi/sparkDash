@@ -151,3 +151,21 @@ test('timeout bounds responses and keeps a single pending read', async () => {
   assert.equal((await next).state, 'ready');
   assert.equal(calls, 1);
 });
+
+test('optional sessionIds retains all known links without guessing a current session', () => {
+  const feed = fixture();
+  feed.executions[0].sessionId = null;
+  feed.executions[0].sessionIds = ['session-a', 'session-orphan'];
+  const result = projectFeed(feed, now);
+  assert.equal(result.executions[0].sessionId, null);
+  assert.deepEqual(result.executions[0].sessionIds, ['session-a', 'session-orphan']);
+  assert.ok(result.sessions.every(session => session.linked));
+  assert.deepEqual(projectFeed(fixture(), now).executions[0].sessionIds, ['session-a']);
+});
+
+test('sessionIds rejects duplicate, dangling and inconsistent primary links', () => {
+  for (const ids of [['session-a', 'session-a'], ['missing'], [], ['session-a', 'session-orphan'], 'session-a']) {
+    const feed = fixture(); feed.executions[0].sessionIds = ids;
+    assert.throws(() => projectFeed(feed, now), /Invalid task feed/);
+  }
+});

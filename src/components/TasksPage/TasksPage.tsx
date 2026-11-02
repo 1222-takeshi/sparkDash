@@ -13,13 +13,14 @@ function FreshnessLabel({ value }: { value: Freshness }) {
   return <span className="text-muted">{value === 'fresh' ? '更新あり（生存確認ではありません）' : value === 'stale' ? '古い報告' : '鮮度不明'}</span>;
 }
 function Execution({ value }: { value: TaskExecution }) {
+  const sessionIds = value.sessionIds ?? (value.sessionId === null ? [] : [value.sessionId]);
   return <li className="rounded border border-border p-3 text-sm">
     <p className="font-semibold">実行ID: {value.id}</p>
     <p>ツール: {tools[value.tool]} · 端末: {value.host ?? '不明'}</p>
     <p>モデル: {value.model ?? '不明'}（{modelBasis[value.modelBasis]}）</p>
     <p>推論先: {value.provider ?? '不明'}</p>
     <p>記録された状態: {statuses[value.status]}（{statusBasis[value.statusBasis]}）</p>
-    <p>セッション: {value.sessionId ?? '未ひも付け'}</p>
+    <p>関連セッション: {sessionIds.length ? sessionIds.join(', ') : '未ひも付け'}</p>
     <p className="text-xs text-muted">開始: {showTime(value.startedAt)} · 更新: {showTime(value.updatedAt)}</p>
     <FreshnessLabel value={value.freshness} />
   </li>;
