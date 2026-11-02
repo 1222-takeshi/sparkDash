@@ -43,6 +43,9 @@ export const CONFIG_DIR_VARS = ["TOOL_EVAL_RESULTS_DIR"];
 export function isolatedConfigEnv(dir) {
   return {
     // Tests must not contact an operator's opt-in inference activity source.
+    // Tasksの実データも子サーバーのテストへ持ち込まない。
+    SPARKDASH_TASKS_ENABLED: "0",
+    SPARKDASH_TASKS_FEED: "",
     SPARKDASH_INFERENCE_ACTIVITY_URL: "",
     SPARKDASH_INFERENCE_ACTIVITY_LABELS: "",
     ...Object.fromEntries(

@@ -1,3 +1,4 @@
+import { TasksPage } from "./components/TasksPage/TasksPage";
 import { BenchIcon } from "./components/bench/BenchIcon";
 import { setConfiguredTimeZone } from "./shared/timeZone";
 import { useState, useCallback, useEffect, useMemo } from "react";
@@ -44,6 +45,7 @@ import {
 import { ConnectionBanner } from "./components/ui/ConnectionBanner";
 import { ErrorBanner } from "./components/ui/ErrorBanner";
 import {
+  TASKS_ID,
   ACTIVITY_ID,
   SHOWCASE_ID,
   ENERGY_ID,
@@ -480,6 +482,7 @@ function DashboardApp() {
       { id: "nav:activity", group: "Go to", label: "Activity", hint: "Page", icon: <ListIcon className="h-4 w-4" />, keywords: "events log history recent", run: () => navigate(ACTIVITY_ID) },
       { id: "nav:kiosk", group: "Go to", label: "Kiosk", hint: "Wall display", icon: <ExpandIcon className="h-4 w-4" />, keywords: "wall tv display fullscreen full screen", run: () => window.location.assign(idToPath(KIOSK_ID)) },
     );
+    cmds.push({ id: TASKS_ID, group: "Pages", label: "Tasks", icon: <ListIcon className="h-4 w-4" />, keywords: "tasks executions sessions", run: () => navigate(TASKS_ID) });
     for (const s of displaySparks) {
       cmds.push({
         id: `nav:${s.id}`,
@@ -577,7 +580,9 @@ function DashboardApp() {
             />
             <ErrorBanner message={actionError} onDismiss={() => setActionError(null)} />
             <main key={chartTimeZone} className={telemetryStale || !connected ? "telemetry-stale" : undefined}>
-              {activeId === TOKENS_ID ? (
+              {activeId === TASKS_ID ? (
+                <TasksPage />
+              ) : activeId === TOKENS_ID ? (
                 <TokensPage sparks={displaySparks} onSelectSpark={navigate} />
               ) : activeId === COST_ID ? (
                 <CostPage />

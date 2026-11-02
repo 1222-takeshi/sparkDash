@@ -10,3 +10,9 @@ node_modules/
 
 # Don't skip server/ or config/ in Docker build
 # They are needed at runtime
+# 非公開のTasks feed・接続設定・作業記録をbuild contextへ渡さない
+.tmp/
+.tasks-runtime/
+**/tasks-feed*.json
+**/tasks-private*
+.env.*

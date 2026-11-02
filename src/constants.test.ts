@@ -1,8 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ENERGY_ID, KIOSK_ID, OVERVIEW_ID, TEMPS_ID, benchId, benchTypeOf, idToPath, initialActiveId, isPageId, isStaleSparkId, pathToId } from "./constants";
+import { TASKS_ID, ENERGY_ID, KIOSK_ID, OVERVIEW_ID, TEMPS_ID, benchId, benchTypeOf, idToPath, initialActiveId, isPageId, isStaleSparkId, pathToId } from "./constants";
 
 describe("route helpers", () => {
   it("round-trips ids and paths", () => {
+    expect(pathToId("/tasks")).toBe(TASKS_ID);
+    expect(idToPath(TASKS_ID)).toBe("/tasks");
+    expect(isPageId(TASKS_ID)).toBe(true);
+    expect(isStaleSparkId(TASKS_ID, [], true)).toBe(false);
     expect(pathToId("/energy")).toBe(ENERGY_ID);
     expect(pathToId("/temps")).toBe(TEMPS_ID);
     expect(idToPath(TEMPS_ID)).toBe("/temps");

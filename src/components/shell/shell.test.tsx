@@ -238,7 +238,7 @@ describe("MobileTabBar sheet", () => {
     expect(document.activeElement).toBe(opener);
   });
 
-  it("Stats opens Token totals, Fleet energy, Temps and Activity; Sparks no longer lists them; Showcase follows Prefill", () => {
+  it("Stats opens Token totals, Fleet energy, Temps, Tasks and Activity; Sparks no longer lists them; Showcase follows Prefill", () => {
     const { container } = render(
       <MobileTabBar sparks={[makeSpark("a")]} activeId={null} onSelect={() => {}} onAdd={() => {}} onOpenSettings={() => {}} />
     );
@@ -246,7 +246,7 @@ describe("MobileTabBar sheet", () => {
     expect(tab("Search")).toBeUndefined();
     act(() => tab("Stats").click());
     let names = [...document.querySelectorAll(".sheet .rail-item__name")].map((n) => n.textContent);
-    expect(names).toEqual(["Token totals", "Cost compare", "Fleet energy", "Temps", "Activity"]);
+    expect(names).toEqual(["Token totals", "Cost compare", "Fleet energy", "Temps", "Tasks", "Activity"]);
     act(() => {
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     });

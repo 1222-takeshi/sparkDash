@@ -17,6 +17,7 @@ The package uses ESM throughout. `server/index.js` runs directly in Node and cre
 | `server/metrics/`, `server/llmtokens/`, `server/energy/` | Metric histories, token accounting and fleet energy |
 | `server/health/`, `server/alerts/`, `server/events/` | Findings, optional notifications and bounded activity history |
 | `server/llmlaunch/`, `server/tooleval/`, `server/gpuclock/` | Model launcher jobs, tool evaluation and GPU-clock management |
+| `server/tasks/` | opt-inの読み取り専用Tasks feed検証・公開許可済みメタデータ投影 |
 | `server/prices/` | Opt-in hosted-model price catalog and offline cache |
 | `src/api/` | API clients and browser-facing data types |
 | `src/hooks/` | Snapshot subscription, metric history and UI hooks |
@@ -43,3 +44,7 @@ Model-launcher programs use GNU `tail --pid` with a process-group lifetime monit
 Preserve the meaning of existing metrics when adding platform support: active residency and frequency-scaled utilisation are distinct signals and should have explicit fields or a documented basis before changing historical series. Hardware names may come from platform probes such as macmon, but a model name is not evidence of an engine version. Cost compare uses an explicitly selected hosted model and an opt-in price catalog; it does not infer a provider from a local model name.
 
 Keep this overview synchronized when module boundaries, scripts, architecture or dependencies change. Historical local design notes may describe earlier versions; verify them against the current source.
+
+## Tasks機能
+
+`server/tasks/`は外部providerが生成した汎用JSONを検証し、既存認証middleware配下の`GET /api/tasks`へ投影する。既定は無効でprovider I/Oは発生しない。`src/components/TasksPage/`は`/tasks`の読み取り専用画面。端末・推論先は別名化し、task/execution/session IDを区別する。モデルの報告値・設定値、状態の観測・報告・記録を区別する。feedの実データは全Git checkout/worktree外の非公開runtimeに置く。契約と境界・切戻しはREADMEのTasks節を参照。公開CIは架空fixtureのみで検証し、runtime artifactをアップロードしない。
