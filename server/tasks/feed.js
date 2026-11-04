@@ -73,9 +73,14 @@ export function projectFeed(feed, now = Date.now()) {
     }
   }
   const sessions = rows(feed.sessions).map(row => {
-    object(row, ['id', 'tool', 'hostRef', 'updatedAt']);
+    object(row, ['id', 'tool', 'hostRef', 'updatedAt'], ['title', 'purpose', 'purposeBasis', 'purposeUpdatedAt']);
     const updatedAt = timestamp(row.updatedAt, now);
-    return { id: id(row.id), tool: choice(row.tool, TOOLS), host: alias(row.hostRef, hosts), updatedAt, freshness: freshness(updatedAt, now), linked: false };
+    const title = nullable(Object.hasOwn(row, 'title') ? row.title : null, value => text(value));
+    const purpose = nullable(Object.hasOwn(row, 'purpose') ? row.purpose : null, value => text(value, 500));
+    const purposeBasis = choice(Object.hasOwn(row, 'purposeBasis') ? row.purposeBasis : 'unknown', ['manual', 'reviewed-summary', 'unknown']);
+    const purposeUpdatedAt = timestamp(Object.hasOwn(row, 'purposeUpdatedAt') ? row.purposeUpdatedAt : null, now);
+    if ((purpose === null) !== (purposeBasis === 'unknown') || (purpose === null && purposeUpdatedAt !== null)) invalid();
+    return { id: id(row.id), tool: choice(row.tool, TOOLS), host: alias(row.hostRef, hosts), updatedAt, freshness: freshness(updatedAt, now), linked: false, title, purpose, purposeBasis, purposeUpdatedAt };
   });
   const sessionIds = unique(sessions);
   const executions = rows(feed.executions, 1000).map(row => {
