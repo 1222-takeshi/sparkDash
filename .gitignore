@@ -51,3 +51,11 @@ config/metrics-history.json.corrupt-*
 config/fleet-energy.scope-*.json
 config/*.tmp
 config/*.json.*.tmp
+
+# 非公開の作業記録・Tasks runtime データ
+.tmp/
+.tasks-runtime/
+**/tasks-feed*.json
+**/tasks-private*
+.env.*
+!.env.example

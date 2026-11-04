@@ -1,0 +1,131 @@
+import { useEffect, useRef, useState } from 'react';
+import { fetchTasks } from '../../api/tasksClient';
+import { onTokenChange } from '../../api/authToken';
+import type { Freshness, TaskExecution, TasksResponse, TaskStatus, TaskTool } from '../../api/tasksTypes';
+
+const tools: Record<TaskTool, string> = { codex: 'Codex', 'claude-code': 'Claude Code', 'local-llm': 'Local LLM', other: 'その他', unknown: '不明' };
+const statuses: Record<TaskStatus, string> = { queued: '待機', running: '実行中', blocked: '保留', completed: '完了', failed: '失敗', cancelled: '中止', unknown: '不明' };
+const scopes = { complete: '設定した収集範囲内で全件', partial: '一部のみ', unsupported: '未対応' };
+const modelBasis = { reported: '実行元が報告', configured: '設定値・使用実績未確認', unknown: '不明' };
+const statusBasis = { reported: '明示報告', observed: '観測', recorded: '保存された記録', unknown: '不明' };
+const showTime = (value: string | null) => value ? new Date(value).toLocaleString() : '未報告';
+function FreshnessLabel({ value }: { value: Freshness }) {
+  return <span className="text-muted">{value === 'fresh' ? '更新あり（生存確認ではありません）' : value === 'stale' ? '古い報告' : '鮮度不明'}</span>;
+}
+function Execution({ value }: { value: TaskExecution }) {
+  const sessionIds = value.sessionIds ?? (value.sessionId === null ? [] : [value.sessionId]);
+  return <li className="rounded border border-border p-3 text-sm">
+    <p className="font-semibold">実行ID: {value.id}</p>
+    <p>ツール: {tools[value.tool]} · 端末: {value.host ?? '不明'}</p>
+    <p>モデル: {value.model ?? '不明'}（{modelBasis[value.modelBasis]}）</p>
+    <p>推論先: {value.provider ?? '不明'}</p>
+    <p>記録された状態: {statuses[value.status]}（{statusBasis[value.statusBasis]}）</p>
+    <p>関連セッション: {sessionIds.length ? sessionIds.join(', ') : '未ひも付け'}</p>
+    <p className="text-xs text-muted">開始: {showTime(value.startedAt)} · 更新: {showTime(value.updatedAt)}</p>
+    <FreshnessLabel value={value.freshness} />
+  </li>;
+}
+
+export function TasksPage() {
+  const [data, setData] = useState<TasksResponse | null>(null);
+  const [error, setError] = useState(false);
+  const [reload, setReload] = useState(0);
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const generation = useRef(0);
+  const activeRequest = useRef<AbortController | null>(null);
+  useEffect(() => onTokenChange(() => {
+    generation.current += 1;
+    activeRequest.current?.abort();
+    setData(null);
+    setError(false);
+    setReload(v => v + 1);
+  }), []);
+  useEffect(() => {
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    let controller: AbortController;
+    const load = async () => {
+      const epoch = generation.current;
+      controller = new AbortController();
+      activeRequest.current = controller;
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      try {
+        const result = await fetchTasks(controller.signal);
+        if (!stopped && epoch === generation.current) { setData(result); setError(false); }
+      } catch {
+        if (!stopped && epoch === generation.current) { setData(null); setError(true); }
+      } finally {
+        clearTimeout(timeout);
+        if (!stopped) timer = setTimeout(load, 10000);
+      }
+    };
+    void load();
+    return () => { stopped = true; clearTimeout(timer); controller?.abort(); };
+  }, [reload]);
+  const available = data?.state === 'ready' || data?.state === 'stale';
+  const orphans = data?.sessions.filter(session => !session.linked) ?? [];
+  const visibleTasks = data?.tasks.filter(task => {
+    const executions = data.executions.filter(execution => execution.taskId === task.id);
+    const searchText = [task.title, task.id, ...executions.flatMap(execution => [tools[execution.tool], execution.model ?? ''])].join(' ').toLocaleLowerCase();
+    return (statusFilter === 'all' || task.status === statusFilter) && searchText.includes(query.toLocaleLowerCase());
+  }) ?? [];
+  return <div className="space-y-5">
+    <header className="flex flex-wrap items-start justify-between gap-3">
+      <div><h1 className="text-xl font-semibold text-text-strong">Tasks</h1>
+        <p className="mt-1 text-sm text-muted">表示を許可したタスクと実行履歴。読み取り専用です。</p></div>
+      <button type="button" className="btn btn--sm" onClick={() => setReload(v => v + 1)}>再読込</button>
+    </header>
+    {!data && !error ? <p role="status">読み込み中…</p> : null}
+    {error || data?.state === 'unavailable' ? <p className="panel p-4" role="alert">タスク情報を取得できません。接続または表示データを確認してください。</p> : null}
+    {data?.state === 'disabled' ? <p className="panel p-4">Tasks連携は無効です。管理者が表示を許可した情報源を設定すると利用できます。</p> : null}
+    {available && data ? <>
+      <section className="panel space-y-2 p-4" aria-label="収集範囲">
+        <h2 className="font-semibold">収集範囲</h2>
+        <p className="text-sm text-muted">未登録のアプリ・起動経路を含む全タスクの一覧ではありません。未表示は未実行を意味しません。</p>
+        {data.coverage.length ? <ul className="text-sm">{data.coverage.map(row => <li key={row.tool}>{tools[row.tool]}: {scopes[row.scope]}</li>)}</ul> : <p>収集範囲は未報告です。</p>}
+        <p className="text-xs text-muted">一覧生成: {showTime(data.generatedAt)}。各項目の更新時刻とは異なります。</p>
+        {data.state === 'stale' ? <p role="alert">一覧情報が古いため、現在の状態は確認できません。</p> : null}
+      </section>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="grid gap-1 text-sm">タスク・ツール・モデルを検索
+          <input className="rounded border border-border bg-transparent p-2" value={query} onChange={event => setQuery(event.target.value)} type="search" />
+        </label>
+        <label className="grid gap-1 text-sm">報告された状態で絞込
+          <select className="rounded border border-border bg-transparent p-2" value={statusFilter} onChange={event => setStatusFilter(event.target.value)}>
+            <option value="all">すべて</option>
+            {Object.entries(statuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
+        <p className="text-sm text-muted" role="status">{visibleTasks.length} / {data.tasks.length} タスクを表示</p>
+      </div>
+      {data.tasks.length > 0 && visibleTasks.length === 0 ? <p>条件に一致するタスクはありません。</p> : null}
+      {data.tasks.length === 0 ? <p className="panel p-4">収集範囲内に表示可能なタスクはありません。</p> : null}
+      {visibleTasks.map(task => {
+        const attempts = data.executions.filter(execution => execution.taskId === task.id);
+        const children = data.tasks.filter(child => child.parentTaskId === task.id);
+        return <article className="panel space-y-3 p-4" key={task.id} id={`task-${task.id}`}>
+          <h2 className="break-words font-semibold text-text-strong">{task.title}</h2>
+          <p className="text-sm">報告された状態: {statuses[task.status]} · <FreshnessLabel value={task.freshness} /></p>
+          <p className="text-sm">{attempts.length ? [...new Set(attempts.map(execution => `${tools[execution.tool]} / ${execution.model ?? 'モデル不明'}（${modelBasis[execution.modelBasis]}）`))].join(' · ') : '実行は未報告'}</p>
+          <details className="space-y-3"><summary className="cursor-pointer text-sm text-accent">進捗・親子関係・実行履歴を表示</summary>
+          <p className="text-xs text-muted">タスクID: {task.id}</p>
+          {task.parentTaskId ? <a className="text-sm text-accent" href={`#task-${task.parentTaskId}`}>親タスク: {task.parentTaskId}</a> : <p className="text-sm text-muted">親タスク未報告</p>}
+          {children.length ? <p className="text-sm">子タスク: {children.map((child, index) => <span key={child.id}>{index ? ', ' : ''}<a className="text-accent" href={`#task-${child.id}`}>{child.title}</a></span>)}</p> : null}
+          <p className="text-sm">報告された状態: {statuses[task.status]} · 工程: {task.stage ?? '未報告'}</p>
+          <p className="text-sm">受入条件: {task.acceptance ? `${task.acceptance.completed} / ${task.acceptance.total} 完了` : '未報告'}</p>
+          <p className="break-words text-sm">進捗報告: {task.summary ?? '未報告'}</p>
+          <p className="text-xs text-muted">更新: {showTime(task.updatedAt)} · <FreshnessLabel value={task.freshness} /></p>
+          <h3 className="text-sm font-semibold">実行履歴（{attempts.length}）</h3>
+          {attempts.length ? <ul className="grid gap-3 md:grid-cols-2">{attempts.map(execution => <Execution key={execution.id} value={execution} />)}</ul> : <p className="text-sm text-muted">実行は未報告です。</p>}
+          </details>
+        </article>;
+      })}
+      <section className="panel space-y-2 p-4" aria-label="未ひも付けセッション">
+        <h2 className="font-semibold">未ひも付けセッション（{orphans.length}）</h2>
+        <p className="text-sm text-muted">タスクとの関係が未確認です。セッションの存在だけでは実行中とは判断しません。</p>
+        <ul className="space-y-2 text-sm">{orphans.map(session => <li key={session.id}>{session.id} · {tools[session.tool]} · {session.host ?? '端末不明'} · {showTime(session.updatedAt)} · <FreshnessLabel value={session.freshness} /></li>)}</ul>
+      </section>
+    </> : null}
+  </div>;
+}

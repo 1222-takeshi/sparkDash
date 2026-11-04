@@ -1330,3 +1330,87 @@ On a fresh install, Cost compare shows **No price data yet** until a catalog is 
 ### Interpreting RoCE traffic
 
 The RoCE panel shows netdev byte-counter rates, which do not measure RDMA payload throughput; a busy tensor-parallel link can therefore show little netdev traffic. Pause-frame counters are cumulative totals and are separate from the current PFC setting. RDMA error counters and their deltas remain available in the panel.
+
+## Tasks（外部タスクの読み取り専用表示）
+
+サイドバー・モバイルのStats・コマンドパレットから **Tasks**（`/tasks`）を開けます。
+Codex / Claude Code / Local LLMなどのタスク、親子関係、実行履歴、未ひも付けセッションを表示します。
+ツール・モデル・推論先・端末は別項目です。モデルの報告値と設定値、状態の明示報告・観測・保存記録を区別します。
+工程・明示的な進捗報告・受入条件の完了数を表示し、時間やtoken数から進捗率を推定しません。
+
+この機能は既定で無効です。有効にしても自動でCLI、IDE、会話、process、モデルサーバーを探索しません。
+外部の非公開providerがこの節の契約に従うfeedを生成する必要があります。
+未対応のアプリ・起動経路を全件収集済みとは扱いません。coverageはproviderが明示した収集範囲の申告です。
+`complete`も「設定した収集範囲内で全件」であり、端末内の全タスクを保証しません。
+
+### 設定・情報境界
+
+サーバー環境変数`SPARKDASH_TASKS_ENABLED=1`と`SPARKDASH_TASKS_FEED`（feedの絶対パス）を設定し、再起動すると有効になります。
+パス・接続情報をフロントエンド変数（`VITE_*`）へ設定しないでください。設定変更・稼働環境への適用には運用上必要な承認を得てください。
+この変更を導入しても認証・bind先は変更されません。コードの公開は稼働画面の公開許可を意味しません。
+既存middlewareは構成によってloopback GETを無認証で許可し、remoteもtoken未設定ならopenです。Tasksを有効にするだけではtoken保護されません。非公開のSSHトンネル・loopback経由を推奨し、新たな外部公開は行わないでください。既存のアクセス制限下でのみ利用し、公開URL、公開artifact、スクリーンショットに実情報を出さないでください。
+
+- feedは全Git checkout/worktreeおよびDocker build contextの外に置く、信頼するUIDが所有する通常ファイルです。ファイルは`0600`または`0400`、親ディレクトリは信頼できる所有者（信頼するUIDまたはroot）とし、group/world書込みを禁止します。root所有stickyディレクトリは親に許可します。
+- symlink（親も含む）、hardlink、非通常ファイル、信頼するUID以外の所有、1 MiB超のファイルを拒否します。ローカルの信頼できるfilesystemを使用してください。ネットワークfilesystem向けのサービスではありません。
+- providerは一時ファイルを同じ非公開ディレクトリへ書き、権限を確定してからatomic renameで更新します。読込み中の変更は拒否します。読込み応答は1.5秒に制限し、未完了readがあれば重複readを作りません。
+- コンテナでは非公開feedディレクトリをread-onlyで`/app`の外へmountし、既定ではサーバー実効UIDと所有権を合わせます。別UIDのproviderが生成する場合はserver-only環境変数`SPARKDASH_TASKS_FEED_UID`へ明示的に信頼する所有者UID（非負整数）を設定できます。無指定ならサーバー実効UID、不正な値なら読込みを拒否します。root実行でも所有者検査は省略しません。DockerfileへCOPYしません。build context外の保管が必須です。
+- `.tmp/`、`.tasks-runtime/`、`tasks-feed*.json`、`tasks-private*`、`.env.*`はGitとDocker contextから除外します。ただし任意のファイル名を保護できるとは限りません。実データをリポジトリ内へ作成しないことが主要な境界です。
+- APIは既存認証下の`GET /api/tasks`のみです。write操作はありません。無効時はproviderファイルを一切読みません。HTTPで外部providerへ接続しません。
+- APIは明示的な項目だけを投影し、端末・推論先の参照キーを別名に変換します。不正なfeed・権限・切断時は空配列と固定の`unavailable`を返し、入力・パス・例外・rawログを応答や通常ログへ出しません。応答は`Cache-Control: no-store`です。
+
+### feed v1契約
+
+`executions[].sessionIds`以外の全キーは必須です。不明は`null`または列挙値`unknown`にします。未定義のキーが1つでもあればfeed全体を拒否します。
+`displayApproved: true`は、**全表示値を監視画面に出すことを送信側が審査・明示許可した宣言**です。
+この宣言自体は秘密検知器ではありません。任意の秘密が通常のタスク名、モデル名、ID、summaryとして入ることをregexで完全検出することはできません。
+providerは自由文を自動転載せず、承認したtitle/summary/stage/modelの値だけを選択してください。
+実ユーザー名・パス・URL・IP・token・会話・prompt・コード・rawログは投入せず、実IDも表示専用のopaque IDへ変換してください。
+`aliases.hosts`と`aliases.providers`も表示を許可した別名だけを登録します。別名は実endpointや資格情報を含みません。
+
+以下は完全に架空の例です。実環境のfeedや識別子ではありません。
+
+```json
+{
+  "schemaVersion": 1,
+  "displayApproved": true,
+  "generatedAt": "2030-01-02T03:04:05Z",
+  "coverage": [{ "tool": "codex", "scope": "partial" }],
+  "aliases": {
+    "hosts": { "desk": "Demo workstation" },
+    "providers": { "cloud": "Demo hosted provider" }
+  },
+  "tasks": [{
+    "id": "task-a", "parentTaskId": null, "title": "Synthetic task",
+    "status": "running", "stage": "review", "summary": "Synthetic progress report",
+    "acceptance": { "completed": 1, "total": 2 }, "updatedAt": "2030-01-02T03:04:05Z"
+  }],
+  "executions": [{
+    "id": "run-a", "taskId": "task-a", "sessionId": "session-a",
+    "tool": "codex", "model": "synthetic-model-a", "modelBasis": "reported",
+    "providerRef": "cloud", "hostRef": "desk", "status": "running", "statusBasis": "reported",
+    "startedAt": "2030-01-02T03:04:05Z", "updatedAt": "2030-01-02T03:04:05Z"
+  }],
+  "sessions": [{
+    "id": "session-a", "tool": "codex", "hostRef": "desk", "updatedAt": "2030-01-02T03:04:05Z"
+  }]
+}
+```
+
+- `tool`: `codex | claude-code | local-llm | other | unknown`。`coverage.scope`: `partial | complete | unsupported`。同一toolのcoverageは1件まで、未記載は未報告です。
+- `status`: `queued | running | blocked | completed | failed | cancelled | unknown`。タスク状態はproviderの明示報告です。summaryや会話から推測した状態は送信しません。
+- `modelBasis`: `reported | configured | unknown`。実行元が使用モデルを明示報告した場合だけ`reported`、設定しか分からない場合は`configured`。modelが`null`ならbasisは`unknown`（逆も同じ）です。
+- `statusBasis`: `reported | observed | recorded | unknown`。状態が`unknown`ならbasisも`unknown`（逆も同じ）。保存された記録だけなら`recorded`で、生存を推定しません。
+- task IDとexecution IDは別です。実行元が新しいExecution/attemptとして確認したモデル切替・retry・実行元変更には新しいexecution IDを付け、過去の実行をfeed内に保持します。同じExecution内の複数モデルやSessionを、架空の新Executionへ変換しません。一意に確認できないモデルはnull/unknownです。このダッシュボード自身は履歴を永続化しません。sessionsの存在だけでtaskを生成しません。
+- executionの任意項目`sessionIds`は、同じExecutionに関連する全Session IDの配列です（最大500、重複・未解決参照は禁止）。順序から現在のSessionを推測しません。配列が1件なら`sessionId`はそのID、0件または複数なら`sessionId:null`にします。旧producerが配列を省略した場合は`sessionId`から0〜1件を補います。複数Sessionの既知関係は未ひも付け扱いにしません。
+- taskの`parentTaskId`、executionの`sessionId`は`null`可。その他の参照は同じfeed内の実在IDが必要です。親子循環・重複ID・未解決参照は拒否します。IDと別名キーは1～64文字の英数字・`_`・`-`（先頭は英数字）です。
+- `title`/`model`は最大160文字、`stage`は80文字、`summary`は500文字、別名は100文字。空文字・制御文字は拒否します。stage/summary/model/providerRef/hostRefは`null`可です。
+- `acceptance`は`null`、または`0 <= completed <= total <= 10000`の整数（totalは1以上）。完了数からtask状態を自動変更しません。
+- 時刻はUTC ISO形式（例の形式、またはミリ秒3桁付き）。generatedAt以外の時刻は`null`可。30秒を超える未来時刻は拒否します。更新から120秒超は`stale`、未報告は`unknown`。一覧のgeneratedAtを個別項目の更新時刻・heartbeatに転用しません。freshでも生存確認を意味しません。
+- 上限: tasks 500、executions 1000、sessions 500、coverage 5、別名各100。feedが上限を超えた場合は勝手に切り詰めず拒否します。収集側で承認した表示範囲と履歴保持方針を決めてください。
+
+### 検証・切戻し
+
+公開テストは架空fixtureのみを使用します。`npm test`、`npm run typecheck`、`npm run build`を実行してください。
+GitHubのSynthetic tests workflowはGitHub-hosted runnerで同じ検証を行い、runtime artifactを保存しません。
+切戻しは`SPARKDASH_TASKS_ENABLED`を解除（または`0`）してサーバーを再起動します。既存監視機能の設定変更は不要です。
+画面に非表示になってもprovider側の実データは残ります。providerの保持・廃棄・秘密値の扱いは非公開側の運用責任です。

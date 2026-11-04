@@ -1,3 +1,4 @@
+import { registerTasksRoutes } from './tasks/routes.js';
 // First on purpose: imports are evaluated in order, and config.js, settings.js
 // and the bench modules read process.env while they load.
 import "dotenv/config";
@@ -504,6 +505,7 @@ app.get("/api/auth/status", createHostGuardMiddleware(), (req, res) => {
 });
 app.use(createAuthMiddleware());
 occupancy.register(app);
+registerTasksRoutes(app);
 
 /** Fleet event log, newest first. Query: limit, sparkId, sinceId. */
 app.get("/api/events", (req, res) => {

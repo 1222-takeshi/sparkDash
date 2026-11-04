@@ -19,7 +19,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import type { AuthMode, SparkSnapshot } from "../../api/types";
 import { isWorkerSpark } from "../../api/sparkRole";
-import { ACTIVITY_ID, COST_ID, ENERGY_ID, KIOSK_ID, OVERVIEW_ID, SHOWCASE_ID, TEMPS_ID, TOKENS_ID, benchId, idToPath } from "../../constants";
+import { TASKS_ID, ACTIVITY_ID, COST_ID, ENERGY_ID, KIOSK_ID, OVERVIEW_ID, SHOWCASE_ID, TEMPS_ID, TOKENS_ID, benchId, idToPath } from "../../constants";
 import { BENCH_TYPES } from "../bench/benchCatalog";
 import { BoltIcon, ChevronDownIcon, CoinsIcon, ExpandIcon, GearIcon, GithubIcon, GlobeIcon, GridIcon, ListIcon, PanelLeftIcon, PlusIcon, SearchIcon, TerminalIcon, ThermometerIcon, TokensIcon, XLogoIcon } from "../ui/icons";
 import { OpenAccessChip } from "../OpenAccessChip";
@@ -357,6 +357,9 @@ export function AppSidebar({
           >
             <ThermometerIcon className="h-4 w-4" />
             <span className="rail-item__name">Temps</span>
+          </a>
+          <a href={idToPath(TASKS_ID)} className={`rail-item ${activeId === TASKS_ID ? "is-active" : ""}`} onClick={inApp(() => onSelect(TASKS_ID))} aria-current={activeId === TASKS_ID ? "page" : undefined}>
+            <ListIcon className="h-4 w-4" /><span className="rail-item__name">Tasks</span>
           </a>
           <a
             href={idToPath(ACTIVITY_ID)}
