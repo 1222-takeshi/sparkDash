@@ -9,14 +9,22 @@ const scopes = { complete: '設定した収集範囲内で全件', partial: '一
 const modelBasis = { reported: '実行元が報告', configured: '設定値・使用実績未確認', unknown: '不明' };
 const statusBasis = { reported: '明示報告', observed: '観測', recorded: '保存された記録', unknown: '不明' };
 const purposeBasis = { manual: '明示された説明', 'reviewed-summary': '確認済み要約', unknown: '不明' };
+const workBasis = { reported: '報告値', reviewed: '確認済み', unknown: '不明' };
+const sessionSearch = (session: TaskSession) => [session.id, session.title ?? '', session.purpose ?? '', tools[session.tool], session.host ?? '', session.workContext?.repository ?? '', session.workContext?.taskName ?? '', session.workContext?.taskRef ?? ''].join(' ');
 const showTime = (value: string | null) => value ? new Date(value).toLocaleString() : '未報告';
 function FreshnessLabel({ value }: { value: Freshness }) {
   return <span className="text-muted">{value === 'fresh' ? '更新あり（生存確認ではありません）' : value === 'stale' ? '古い報告' : '鮮度不明'}</span>;
 }
 function SessionDescription({ value }: { value: TaskSession }) {
   return <div className="space-y-1 break-words">
-    <p className="font-semibold">{value.title ?? value.id}</p>
-    {value.title ? <p className="text-xs text-muted">セッションID: {value.id}</p> : null}
+    <p className="font-semibold">作業リポジトリ: {value.workContext?.repository ?? '未報告'}</p>
+    <p className="font-semibold">タスク: {value.workContext?.taskName ?? '未報告'}{value.workContext?.taskRef ? `（${value.workContext.taskRef}）` : ''}</p>
+    {value.workContext && value.workContext.basis !== 'unknown' ? <>
+      <p className="text-xs text-muted">作業情報の根拠: {workBasis[value.workContext.basis]}（確認時点の情報）</p>
+      <p className="text-xs text-muted">作業情報の確認時刻: {value.workContext.updatedAt ? showTime(value.workContext.updatedAt) : '未報告（鮮度不明）'}</p>
+    </> : null}
+    {value.title ? <p>{value.title}</p> : null}
+    <p className="text-xs text-muted">セッションID: {value.id}</p>
     <p>{value.purpose ?? '説明未報告'}</p>
     {value.purpose ? <>
       <p className="text-xs text-muted">説明の根拠: {purposeBasis[value.purposeBasis ?? 'unknown']}（確認時点の説明）</p>
@@ -78,10 +86,11 @@ export function TasksPage() {
   }, [reload]);
   const available = data?.state === 'ready' || data?.state === 'stale';
   const allOrphans = data?.sessions.filter(session => !session.linked) ?? [];
-  const orphans = allOrphans.filter(session => [session.id, session.title ?? '', session.purpose ?? '', tools[session.tool], session.host ?? ''].join(' ').toLocaleLowerCase().includes(query.toLocaleLowerCase()));
+  const orphans = allOrphans.filter(session => sessionSearch(session).toLocaleLowerCase().includes(query.toLocaleLowerCase()));
   const visibleTasks = data?.tasks.filter(task => {
     const executions = data.executions.filter(execution => execution.taskId === task.id);
-    const searchText = [task.title, task.id, ...executions.flatMap(execution => [tools[execution.tool], execution.model ?? ''])].join(' ').toLocaleLowerCase();
+    const linkedIds = new Set(executions.flatMap(execution => execution.sessionIds ?? (execution.sessionId === null ? [] : [execution.sessionId])));
+    const searchText = [task.title, task.id, ...executions.flatMap(execution => [tools[execution.tool], execution.model ?? '']), ...data.sessions.filter(session => linkedIds.has(session.id)).map(sessionSearch)].join(' ').toLocaleLowerCase();
     return (statusFilter === 'all' || task.status === statusFilter) && searchText.includes(query.toLocaleLowerCase());
   }) ?? [];
   return <div className="space-y-5">
@@ -102,7 +111,7 @@ export function TasksPage() {
         {data.state === 'stale' ? <p role="alert">一覧情報が古いため、現在の状態は確認できません。</p> : null}
       </section>
       <div className="flex flex-wrap items-end gap-3">
-        <label className="grid gap-1 text-sm">タスク・ツール・モデル・未ひも付けセッションの説明を検索
+        <label className="grid gap-1 text-sm">タスク・リポジトリ・参照番号・ツール・モデル・セッションの説明を検索
           <input className="rounded border border-border bg-transparent p-2" value={query} onChange={event => setQuery(event.target.value)} type="search" />
         </label>
         <label className="grid gap-1 text-sm">タスクの状態で絞込

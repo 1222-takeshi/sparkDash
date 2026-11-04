@@ -140,3 +140,29 @@ it('shows linked session explanations without changing execution state', async (
   expect(container.textContent).toContain('記録された状態: 不明');
   expect(container.textContent).toContain('未ひも付けセッション（0）');
 });
+
+it('shows repository and task context as plain primary information and searches each field', async () => {
+  mock.mockResolvedValue({ ...empty, sessions: [
+    { id: 'session-context', tool: 'codex', host: null, updatedAt: null, freshness: 'unknown', linked: false, title: 'Synthetic session', workContext: { repository: 'demo-owner/demo-repo', taskName: '<b>Synthetic parser review</b>', taskRef: 'DEMO-7', basis: 'reviewed', updatedAt: null } },
+    { id: 'session-legacy', tool: 'other', host: null, updatedAt: null, freshness: 'unknown', linked: false },
+  ] });
+  const { container } = render(<TasksPage />); await flush();
+  expect(container.textContent).toContain('作業リポジトリ: demo-owner/demo-repo');
+  expect(container.textContent).toContain('タスク: <b>Synthetic parser review</b>');
+  expect(container.textContent).toContain('DEMO-7');
+  expect(container.textContent).toContain('作業情報の根拠: 確認済み');
+  expect(container.textContent).toContain('作業情報の確認時刻: 未報告（鮮度不明）');
+  expect(container.textContent).toContain('作業リポジトリ: 未報告');
+  expect(container.querySelector('b')).toBeNull();
+  expect(container.querySelectorAll('article')).toHaveLength(0);
+  for (const query of ['demo-repo', 'parser review', 'DEMO-7']) {
+    act(() => {
+      const input = container.querySelector('input')!;
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, query);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const section = container.querySelector('[aria-label="未ひも付けセッション"]')!;
+    expect(section.textContent).toContain('session-context');
+    expect(section.textContent).not.toContain('session-legacy');
+  }
+});

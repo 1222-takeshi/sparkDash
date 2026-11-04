@@ -208,3 +208,40 @@ for (const [name, change] of [
   assert.equal(result.sessions.length, 0);
   assert.ok(!JSON.stringify(result).includes('SYNTHETIC_SECRET_CANARY'));
 });
+
+const workContext = { repository: 'demo-owner/demo-repo', taskName: 'Review synthetic parser', taskRef: 'DEMO-7', basis: 'reviewed', updatedAt: '2029-01-01T00:00:00Z' };
+test('session work context keeps legacy, unknown and independently missing fields', () => {
+  const feed = fixture();
+  assert.equal(projectFeed(feed, now).sessions[0].workContext, null);
+  for (const context of [null, workContext, { ...workContext, repository: null }, { ...workContext, taskName: null, taskRef: null, basis: 'reported', updatedAt: null }, { repository: null, taskName: null, taskRef: null, basis: 'unknown', updatedAt: null }]) {
+    feed.sessions[0].workContext = context;
+    const result = projectFeed(feed, now);
+    assert.deepEqual(result.sessions[0].workContext, context);
+    assert.equal(result.sessions[0].updatedAt, stamp);
+    assert.equal(result.tasks.length, 2);
+  }
+});
+for (const [name, change] of [
+  ['absolute path', { repository: '/home/demo/repo' }],
+  ['windows path', { repository: 'C:\\demo' }],
+  ['home path', { repository: '~/demo' }],
+  ['remote URL', { repository: 'https://example.test/demo/repo' }],
+  ['credentials', { repository: 'demo@example.test/repo' }],
+  ['nested path', { repository: 'demo/repo/subdir' }],
+  ['empty label', { repository: ' ' }],
+  ['oversized label', { repository: '😀'.repeat(81) }],
+  ['oversized name', { taskName: '😀'.repeat(81) }],
+  ['control name', { taskName: 'demo\nsecret' }],
+  ['URL reference', { taskRef: 'https://example.test/7' }],
+  ['unknown populated', { basis: 'unknown' }],
+  ['unsupported basis', { basis: 'inferred' }],
+  ['empty reported', { repository: null, taskName: null, taskRef: null }],
+  ['future context', { updatedAt: new Date(now + 31000).toISOString() }],
+  ['invalid date', { updatedAt: '2029-02-31T00:00:00Z' }],
+  ['extra secret', { rawPrompt: 'SYNTHETIC_SECRET_CANARY' }],
+]) test(`work context rejects ${name} without reflecting input`, async () => {
+  const feed = fixture(); feed.sessions[0].workContext = { ...workContext, ...change };
+  const result = await createTasksReader({ enabled: true, now: () => now, readFile: async () => feed })();
+  assert.equal(result.state, 'unavailable');
+  assert.ok(!JSON.stringify(result).includes('SYNTHETIC_SECRET_CANARY'));
+});
