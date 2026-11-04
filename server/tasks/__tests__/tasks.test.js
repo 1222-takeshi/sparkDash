@@ -169,3 +169,42 @@ test('sessionIds rejects duplicate, dangling and inconsistent primary links', ()
     assert.throws(() => projectFeed(feed, now), /Invalid task feed/);
   }
 });
+
+
+test('optional session descriptions preserve legacy shape and separate source times', () => {
+  const feed = fixture();
+  const legacy = projectFeed(feed, now).sessions[0];
+  assert.deepEqual([legacy.title, legacy.purpose, legacy.purposeBasis, legacy.purposeUpdatedAt], [null, null, 'unknown', null]);
+  Object.assign(feed.sessions[0], { title: 'Synthetic documentation session', purpose: '<b>Explain a synthetic module</b>', purposeBasis: 'reviewed-summary', purposeUpdatedAt: '2029-01-01T00:00:00Z' });
+  const result = projectFeed(feed, now);
+  assert.equal(result.sessions[0].purpose, '<b>Explain a synthetic module</b>');
+  assert.equal(result.sessions[0].purposeBasis, 'reviewed-summary');
+  assert.equal(result.sessions[0].purposeUpdatedAt, '2029-01-01T00:00:00Z');
+  assert.equal(result.sessions[0].updatedAt, stamp);
+  assert.equal(result.executions[0].status, 'completed');
+  Object.assign(feed.sessions[1], { title: '😀'.repeat(80), purpose: '😀'.repeat(250), purposeBasis: 'manual', purposeUpdatedAt: null });
+  assert.equal(projectFeed(feed, now).sessions[1].purposeUpdatedAt, null);
+});
+
+for (const [name, change] of [
+  ['oversized title', { title: '😀'.repeat(81) }],
+  ['oversized purpose', { purpose: '😀'.repeat(251) }],
+  ['blank title', { title: '  ' }],
+  ['blank purpose', { purpose: '\ufeff ' }],
+  ['control character', { purpose: 'synthetic\u007f' }],
+  ['wrong text type', { purpose: 1 }],
+  ['unknown basis with description', { purposeBasis: 'unknown' }],
+  ['unsupported basis', { purposeBasis: 'inferred' }],
+  ['basis without purpose', { purpose: null }],
+  ['time without purpose', { purpose: null, purposeBasis: 'unknown', purposeUpdatedAt: stamp }],
+  ['future description', { purposeUpdatedAt: new Date(now + 31000).toISOString() }],
+  ['invalid date', { purposeUpdatedAt: '2029-02-31T00:00:00Z' }],
+  ['extra secret input', { prompt: 'SYNTHETIC_SECRET_CANARY' }],
+]) test(`session description rejects ${name} without reflecting input`, async () => {
+  const feed = fixture();
+  Object.assign(feed.sessions[0], { title: null, purpose: 'Synthetic purpose', purposeBasis: 'manual', purposeUpdatedAt: null }, change);
+  const result = await createTasksReader({ enabled: true, now: () => now, readFile: async () => feed })();
+  assert.equal(result.state, 'unavailable');
+  assert.equal(result.sessions.length, 0);
+  assert.ok(!JSON.stringify(result).includes('SYNTHETIC_SECRET_CANARY'));
+});

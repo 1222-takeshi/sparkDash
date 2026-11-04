@@ -1,18 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
 import { fetchTasks } from '../../api/tasksClient';
 import { onTokenChange } from '../../api/authToken';
-import type { Freshness, TaskExecution, TasksResponse, TaskStatus, TaskTool } from '../../api/tasksTypes';
+import type { Freshness, TaskExecution, TaskSession, TasksResponse, TaskStatus, TaskTool } from '../../api/tasksTypes';
 
 const tools: Record<TaskTool, string> = { codex: 'Codex', 'claude-code': 'Claude Code', 'local-llm': 'Local LLM', other: 'その他', unknown: '不明' };
 const statuses: Record<TaskStatus, string> = { queued: '待機', running: '実行中', blocked: '保留', completed: '完了', failed: '失敗', cancelled: '中止', unknown: '不明' };
 const scopes = { complete: '設定した収集範囲内で全件', partial: '一部のみ', unsupported: '未対応' };
 const modelBasis = { reported: '実行元が報告', configured: '設定値・使用実績未確認', unknown: '不明' };
 const statusBasis = { reported: '明示報告', observed: '観測', recorded: '保存された記録', unknown: '不明' };
+const purposeBasis = { manual: '明示された説明', 'reviewed-summary': '確認済み要約', unknown: '不明' };
 const showTime = (value: string | null) => value ? new Date(value).toLocaleString() : '未報告';
 function FreshnessLabel({ value }: { value: Freshness }) {
   return <span className="text-muted">{value === 'fresh' ? '更新あり（生存確認ではありません）' : value === 'stale' ? '古い報告' : '鮮度不明'}</span>;
 }
-function Execution({ value }: { value: TaskExecution }) {
+function SessionDescription({ value }: { value: TaskSession }) {
+  return <div className="space-y-1 break-words">
+    <p className="font-semibold">{value.title ?? value.id}</p>
+    {value.title ? <p className="text-xs text-muted">セッションID: {value.id}</p> : null}
+    <p>{value.purpose ?? '説明未報告'}</p>
+    {value.purpose ? <>
+      <p className="text-xs text-muted">説明の根拠: {purposeBasis[value.purposeBasis ?? 'unknown']}（確認時点の説明）</p>
+      <p className="text-xs text-muted">説明の確認時刻: {value.purposeUpdatedAt ? showTime(value.purposeUpdatedAt) : '未報告（鮮度不明）'}</p>
+    </> : null}
+  </div>;
+}
+function Execution({ value, sessions }: { value: TaskExecution; sessions: TaskSession[] }) {
   const sessionIds = value.sessionIds ?? (value.sessionId === null ? [] : [value.sessionId]);
   return <li className="rounded border border-border p-3 text-sm">
     <p className="font-semibold">実行ID: {value.id}</p>
@@ -21,6 +33,7 @@ function Execution({ value }: { value: TaskExecution }) {
     <p>推論先: {value.provider ?? '不明'}</p>
     <p>記録された状態: {statuses[value.status]}（{statusBasis[value.statusBasis]}）</p>
     <p>関連セッション: {sessionIds.length ? sessionIds.join(', ') : '未ひも付け'}</p>
+    {sessions.filter(session => sessionIds.includes(session.id)).map(session => <SessionDescription key={session.id} value={session} />)}
     <p className="text-xs text-muted">開始: {showTime(value.startedAt)} · 更新: {showTime(value.updatedAt)}</p>
     <FreshnessLabel value={value.freshness} />
   </li>;
@@ -64,7 +77,8 @@ export function TasksPage() {
     return () => { stopped = true; clearTimeout(timer); controller?.abort(); };
   }, [reload]);
   const available = data?.state === 'ready' || data?.state === 'stale';
-  const orphans = data?.sessions.filter(session => !session.linked) ?? [];
+  const allOrphans = data?.sessions.filter(session => !session.linked) ?? [];
+  const orphans = allOrphans.filter(session => [session.id, session.title ?? '', session.purpose ?? '', tools[session.tool], session.host ?? ''].join(' ').toLocaleLowerCase().includes(query.toLocaleLowerCase()));
   const visibleTasks = data?.tasks.filter(task => {
     const executions = data.executions.filter(execution => execution.taskId === task.id);
     const searchText = [task.title, task.id, ...executions.flatMap(execution => [tools[execution.tool], execution.model ?? ''])].join(' ').toLocaleLowerCase();
@@ -88,10 +102,10 @@ export function TasksPage() {
         {data.state === 'stale' ? <p role="alert">一覧情報が古いため、現在の状態は確認できません。</p> : null}
       </section>
       <div className="flex flex-wrap items-end gap-3">
-        <label className="grid gap-1 text-sm">タスク・ツール・モデルを検索
+        <label className="grid gap-1 text-sm">タスク・ツール・モデル・未ひも付けセッションの説明を検索
           <input className="rounded border border-border bg-transparent p-2" value={query} onChange={event => setQuery(event.target.value)} type="search" />
         </label>
-        <label className="grid gap-1 text-sm">報告された状態で絞込
+        <label className="grid gap-1 text-sm">タスクの状態で絞込
           <select className="rounded border border-border bg-transparent p-2" value={statusFilter} onChange={event => setStatusFilter(event.target.value)}>
             <option value="all">すべて</option>
             {Object.entries(statuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -117,14 +131,18 @@ export function TasksPage() {
           <p className="break-words text-sm">進捗報告: {task.summary ?? '未報告'}</p>
           <p className="text-xs text-muted">更新: {showTime(task.updatedAt)} · <FreshnessLabel value={task.freshness} /></p>
           <h3 className="text-sm font-semibold">実行履歴（{attempts.length}）</h3>
-          {attempts.length ? <ul className="grid gap-3 md:grid-cols-2">{attempts.map(execution => <Execution key={execution.id} value={execution} />)}</ul> : <p className="text-sm text-muted">実行は未報告です。</p>}
+          {attempts.length ? <ul className="grid gap-3 md:grid-cols-2">{attempts.map(execution => <Execution key={execution.id} value={execution} sessions={data.sessions} />)}</ul> : <p className="text-sm text-muted">実行は未報告です。</p>}
           </details>
         </article>;
       })}
       <section className="panel space-y-2 p-4" aria-label="未ひも付けセッション">
         <h2 className="font-semibold">未ひも付けセッション（{orphans.length}）</h2>
         <p className="text-sm text-muted">タスクとの関係が未確認です。セッションの存在だけでは実行中とは判断しません。</p>
-        <ul className="space-y-2 text-sm">{orphans.map(session => <li key={session.id}>{session.id} · {tools[session.tool]} · {session.host ?? '端末不明'} · {showTime(session.updatedAt)} · <FreshnessLabel value={session.freshness} /></li>)}</ul>
+        {query ? <p className="text-xs text-muted">{orphans.length} / {allOrphans.length} セッションが検索条件に一致</p> : null}
+        <ul className="space-y-3 text-sm">{orphans.map(session => <li className="rounded border border-border p-3" key={session.id}>
+          <SessionDescription value={session} />
+          <p className="mt-2">{tools[session.tool]} · {session.host ?? '端末不明'} · {showTime(session.updatedAt)} · <FreshnessLabel value={session.freshness} /></p>
+        </li>)}</ul>
       </section>
     </> : null}
   </div>;

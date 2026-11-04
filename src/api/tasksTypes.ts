@@ -12,7 +12,11 @@ export interface TaskExecution extends Updated {
   provider: string | null; host: string | null; status: TaskStatus;
   statusBasis: 'reported' | 'observed' | 'recorded' | 'unknown'; startedAt: string | null;
 }
-export interface TaskSession extends Updated { id: string; tool: TaskTool; host: string | null; linked: boolean }
+export interface TaskSession extends Updated {
+  id: string; tool: TaskTool; host: string | null; linked: boolean;
+  title?: string | null; purpose?: string | null;
+  purposeBasis?: 'manual' | 'reviewed-summary' | 'unknown'; purposeUpdatedAt?: string | null;
+}
 export interface TasksResponse {
   state: 'disabled' | 'unavailable' | 'ready' | 'stale'; generatedAt: string | null;
   coverage: { tool: TaskTool; scope: 'partial' | 'complete' | 'unsupported' }[];

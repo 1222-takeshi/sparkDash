@@ -105,3 +105,38 @@ it('shows all known sessions while no current session is selected', async () => 
   expect(container.textContent).toContain('関連セッション: session-a, session-b');
   expect(container.textContent).toContain('未ひも付けセッション（0）');
 });
+
+
+it('shows approved session purpose as plain text with separate source time and missing indicators', async () => {
+  mock.mockResolvedValue({ ...empty, sessions: [
+    { id: 'described', tool: 'codex', host: 'Demo workstation', updatedAt: null, freshness: 'unknown', linked: false, title: 'Synthetic documentation', purpose: '<img src=x onerror=alert(1)> Explain synthetic module', purposeBasis: 'reviewed-summary', purposeUpdatedAt: null },
+    { id: 'unreported', tool: 'other', host: null, updatedAt: null, freshness: 'unknown', linked: false },
+  ] });
+  const { container } = render(<TasksPage />); await flush();
+  expect(container.textContent).toContain('Synthetic documentation');
+  expect(container.textContent).toContain('<img src=x onerror=alert(1)> Explain synthetic module');
+  expect(container.textContent).toContain('確認済み要約');
+  expect(container.textContent).toContain('説明の確認時刻: 未報告（鮮度不明）');
+  expect(container.textContent).toContain('説明未報告');
+  expect(container.querySelector('img')).toBeNull();
+  expect(container.querySelectorAll('article')).toHaveLength(0);
+  const input = container.querySelector('input')!;
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'synthetic module');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  const section = container.querySelector('[aria-label="未ひも付けセッション"]')!;
+  expect(section.textContent).toContain('described');
+  expect(section.textContent).not.toContain('unreported');
+});
+
+it('shows linked session explanations without changing execution state', async () => {
+  mock.mockResolvedValue({ ...empty, tasks: [{ id: 'task-a', parentTaskId: null, title: 'Synthetic task', status: 'unknown', stage: null, summary: null, acceptance: null, updatedAt: null, freshness: 'unknown' }],
+    executions: [{ id: 'run-a', taskId: 'task-a', sessionId: 'session-a', tool: 'codex', model: null, modelBasis: 'unknown', provider: null, host: null, status: 'unknown', statusBasis: 'unknown', startedAt: null, updatedAt: null, freshness: 'unknown' }],
+    sessions: [{ id: 'session-a', tool: 'codex', host: null, updatedAt: null, freshness: 'unknown', linked: true, title: null, purpose: 'Review synthetic tests', purposeBasis: 'manual', purposeUpdatedAt: '2030-01-01T00:00:00Z' }] });
+  const { container } = render(<TasksPage />); await flush();
+  expect(container.querySelector('article')?.textContent).toContain('Review synthetic tests');
+  expect(container.textContent).toContain('明示された説明');
+  expect(container.textContent).toContain('記録された状態: 不明');
+  expect(container.textContent).toContain('未ひも付けセッション（0）');
+});
