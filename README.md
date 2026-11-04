@@ -1334,7 +1334,7 @@ The RoCE panel shows netdev byte-counter rates, which do not measure RDMA payloa
 ## Tasks（外部タスクの読み取り専用表示）
 
 サイドバー・モバイルのStats・コマンドパレットから **Tasks**（`/tasks`）を開けます。
-Codex / Claude Code / Local LLMなどのタスク、親子関係、実行履歴、未ひも付けセッションを表示します。
+Codex / Claude Code / Local LLMなどの全セッションを一覧表示し、リポジトリ・ツール・端末でAND絞込できます。表示件数／全件数、未報告値、空結果、リセットに対応します。全体検索は登録タスクにも適用し、登録タスクがある場合は別欄に親子関係・実行履歴と専用の状態絞込を表示します。選択は再取得後も保持し、認証変更時は検索・絞込を初期化します。
 ツール・モデル・推論先・端末は別項目です。モデルの報告値と設定値、状態の明示報告・観測・保存記録を区別します。
 工程・明示的な進捗報告・受入条件の完了数を表示し、時間やtoken数から進捗率を推定しません。
 
@@ -1404,7 +1404,7 @@ providerは自由文を自動転載せず、承認したtitle/summary/stage/mode
 - executionの任意項目`sessionIds`は、同じExecutionに関連する全Session IDの配列です（最大500、重複・未解決参照は禁止）。順序から現在のSessionを推測しません。配列が1件なら`sessionId`はそのID、0件または複数なら`sessionId:null`にします。旧producerが配列を省略した場合は`sessionId`から0〜1件を補います。複数Sessionの既知関係は未ひも付け扱いにしません。
 - Sessionの任意説明は`title`（160 UTF-16 code units以内）、`purpose`（500以内）、`purposeBasis`（`manual | reviewed-summary | unknown`）、`purposeUpdatedAt`（UTC時刻またはnull）です。文字列はnull可、空白のみ・制御文字は禁止です。旧producerの省略はnull/null/unknown/nullとして扱い、「説明未報告」と表示します。purposeがあればbasisはmanualまたはreviewed-summaryが必須、purposeがnullならbasisはunknown、purposeUpdatedAtはnullです。titleだけの提供も可能です。
 - 説明は送信側が明示許可した確認時点のsnapshotです。`manual`は「明示された説明」、`reviewed-summary`は「確認済み要約」と表示します。`purposeUpdatedAt`は説明の元の確認時刻であり、Session更新時刻や一覧生成時刻から補いません。nullなら説明の鮮度不明です。Task/Execution/状態/進捗を説明から推測せず、会話への追記で自動更新されたとも扱いません。例: `{"title":"Synthetic documentation","purpose":"Explain a synthetic module","purposeBasis":"reviewed-summary","purposeUpdatedAt":null}`。
-- Sessionの説明は通常の文字列として表示します。未ひも付けSessionはtitle/purpose・ID・tool・端末から検索できます。説明には承認された非公開情報が含まれ得るため、公開画面への許可を意味しません。旧consumerへ切り戻す際は、producerの説明欄出力も止めてください（旧consumerは未知キーを拒否します）。
+- Sessionの説明は通常の文字列として表示します。関連有無を問わずSessionはtitle/purpose・ID・tool・端末から検索できます。説明には承認された非公開情報が含まれ得るため、公開画面への許可を意味しません。旧consumerへ切り戻す際は、producerの説明欄出力も止めてください（旧consumerは未知キーを拒否します）。
 - taskの`parentTaskId`、executionの`sessionId`は`null`可。その他の参照は同じfeed内の実在IDが必要です。親子循環・重複ID・未解決参照は拒否します。IDと別名キーは1～64文字の英数字・`_`・`-`（先頭は英数字）です。
 - `title`/`model`は最大160文字、`stage`は80文字、`summary`は500文字、別名は100文字。空文字・制御文字は拒否します。stage/summary/model/providerRef/hostRefは`null`可です。
 - `acceptance`は`null`、または`0 <= completed <= total <= 10000`の整数（totalは1以上）。完了数からtask状態を自動変更しません。
