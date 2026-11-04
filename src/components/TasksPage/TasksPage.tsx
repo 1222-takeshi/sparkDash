@@ -12,6 +12,24 @@ const purposeBasis = { manual: '明示された説明', 'reviewed-summary': '確
 const workBasis = { reported: '報告値', reviewed: '確認済み', unknown: '不明' };
 const sessionSearch = (session: TaskSession) => [session.id, session.title ?? '', session.purpose ?? '', tools[session.tool], session.host ?? '', session.workContext?.repository ?? '', session.workContext?.taskName ?? '', session.workContext?.taskRef ?? ''].join(' ');
 const showTime = (value: string | null) => value ? new Date(value).toLocaleString() : '未報告';
+type SessionFilterValue = string | null | undefined;
+const filterValue = (value: SessionFilterValue) => value === undefined ? '' : JSON.stringify(value);
+function SessionFilter({ label, values, value, onChange, display = value => value ?? '未報告' }: {
+  label: string; values: (string | null)[]; value: SessionFilterValue;
+  onChange: (value: SessionFilterValue) => void; display?: (value: string | null) => string;
+}) {
+  const options = [...new Set(values)].sort((a, b) => (a ?? '').localeCompare(b ?? ''));
+  const missingSelection = value !== undefined && !options.includes(value);
+  // 未報告はnullで区別し、同名の報告値がある場合は表示も分ける。
+  const optionLabel = (option: string | null) => option === null && options.includes('未報告') ? '未報告（値なし）' : display(option);
+  return <label className="grid min-w-0 gap-1 text-sm">{label}
+    <select className="w-full min-w-0 rounded border border-border bg-transparent p-2" aria-label={`セッションの${label}`} value={filterValue(value)} onChange={event => onChange(event.target.value === '' ? undefined : JSON.parse(event.target.value))}>
+      <option value="">すべて</option>
+      {options.map(option => <option key={filterValue(option)} value={filterValue(option)}>{optionLabel(option)}</option>)}
+      {missingSelection ? <option value={filterValue(value)}>{optionLabel(value)}（現在の一覧にありません）</option> : null}
+    </select>
+  </label>;
+}
 function FreshnessLabel({ value }: { value: Freshness }) {
   return <span className="text-muted">{value === 'fresh' ? '更新あり（生存確認ではありません）' : value === 'stale' ? '古い報告' : '鮮度不明'}</span>;
 }
@@ -53,12 +71,19 @@ export function TasksPage() {
   const [reload, setReload] = useState(0);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [repositoryFilter, setRepositoryFilter] = useState<SessionFilterValue>();
+  const [toolFilter, setToolFilter] = useState<SessionFilterValue>();
+  const [hostFilter, setHostFilter] = useState<SessionFilterValue>();
+  const resetSessionFilters = () => {
+    setQuery(''); setRepositoryFilter(undefined); setToolFilter(undefined); setHostFilter(undefined);
+  };
   const generation = useRef(0);
   const activeRequest = useRef<AbortController | null>(null);
   useEffect(() => onTokenChange(() => {
     generation.current += 1;
     activeRequest.current?.abort();
     setData(null);
+    setQuery(''); setRepositoryFilter(undefined); setToolFilter(undefined); setHostFilter(undefined); setStatusFilter('all');
     setError(false);
     setReload(v => v + 1);
   }), []);
@@ -85,18 +110,22 @@ export function TasksPage() {
     return () => { stopped = true; clearTimeout(timer); controller?.abort(); };
   }, [reload]);
   const available = data?.state === 'ready' || data?.state === 'stale';
-  const allOrphans = data?.sessions.filter(session => !session.linked) ?? [];
-  const orphans = allOrphans.filter(session => sessionSearch(session).toLocaleLowerCase().includes(query.toLocaleLowerCase()));
+  const searchQuery = query.trim().toLocaleLowerCase();
+  const visibleSessions = data?.sessions.filter(session =>
+    (repositoryFilter === undefined || (session.workContext?.repository ?? null) === repositoryFilter)
+    && (toolFilter === undefined || session.tool === toolFilter)
+    && (hostFilter === undefined || session.host === hostFilter)
+    && sessionSearch(session).toLocaleLowerCase().includes(searchQuery)) ?? [];
   const visibleTasks = data?.tasks.filter(task => {
     const executions = data.executions.filter(execution => execution.taskId === task.id);
     const linkedIds = new Set(executions.flatMap(execution => execution.sessionIds ?? (execution.sessionId === null ? [] : [execution.sessionId])));
     const searchText = [task.title, task.id, ...executions.flatMap(execution => [tools[execution.tool], execution.model ?? '']), ...data.sessions.filter(session => linkedIds.has(session.id)).map(sessionSearch)].join(' ').toLocaleLowerCase();
-    return (statusFilter === 'all' || task.status === statusFilter) && searchText.includes(query.toLocaleLowerCase());
+    return (statusFilter === 'all' || task.status === statusFilter) && searchText.includes(searchQuery);
   }) ?? [];
   return <div className="space-y-5">
     <header className="flex flex-wrap items-start justify-between gap-3">
       <div><h1 className="text-xl font-semibold text-text-strong">Tasks</h1>
-        <p className="mt-1 text-sm text-muted">表示を許可したタスクと実行履歴。読み取り専用です。</p></div>
+        <p className="mt-1 text-sm text-muted">表示を許可したセッション・タスクと実行履歴。読み取り専用です。</p></div>
       <button type="button" className="btn btn--sm" onClick={() => setReload(v => v + 1)}>再読込</button>
     </header>
     {!data && !error ? <p role="status">読み込み中…</p> : null}
@@ -110,20 +139,40 @@ export function TasksPage() {
         <p className="text-xs text-muted">一覧生成: {showTime(data.generatedAt)}。各項目の更新時刻とは異なります。</p>
         {data.state === 'stale' ? <p role="alert">一覧情報が古いため、現在の状態は確認できません。</p> : null}
       </section>
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="grid gap-1 text-sm">タスク・リポジトリ・参照番号・ツール・モデル・セッションの説明を検索
-          <input className="rounded border border-border bg-transparent p-2" value={query} onChange={event => setQuery(event.target.value)} type="search" />
-        </label>
-        <label className="grid gap-1 text-sm">タスクの状態で絞込
-          <select className="rounded border border-border bg-transparent p-2" value={statusFilter} onChange={event => setStatusFilter(event.target.value)}>
-            <option value="all">すべて</option>
-            {Object.entries(statuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
-        </label>
-        <p className="text-sm text-muted" role="status">{visibleTasks.length} / {data.tasks.length} タスクを表示</p>
-      </div>
-      {data.tasks.length > 0 && visibleTasks.length === 0 ? <p>条件に一致するタスクはありません。</p> : null}
-      {data.tasks.length === 0 ? <p className="panel p-4">収集範囲内に表示可能なタスクはありません。</p> : null}
+      <label className="grid gap-1 text-sm">全体検索（タスク・リポジトリ・参照番号・ツール・モデル・端末・セッションの説明）
+        <input className="w-full rounded border border-border bg-transparent p-2" value={query} onChange={event => setQuery(event.target.value)} type="search" />
+      </label>
+      <section className="panel space-y-3 p-4" aria-label="セッション一覧">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-semibold">セッション一覧</h2>
+          <p className="text-sm text-muted" role="status">{visibleSessions.length} / {data.sessions.length} セッションを表示</p>
+        </div>
+        <p className="text-sm text-muted">以下の絞込はセッション一覧のみに適用します。セッションの存在だけでは実行中とは判断しません。</p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <SessionFilter label="リポジトリ" values={data.sessions.map(session => session.workContext?.repository ?? null)} value={repositoryFilter} onChange={setRepositoryFilter} />
+          <SessionFilter label="ツール" values={data.sessions.map(session => session.tool)} value={toolFilter} onChange={setToolFilter} display={value => tools[value as TaskTool]} />
+          <SessionFilter label="端末" values={data.sessions.map(session => session.host)} value={hostFilter} onChange={setHostFilter} />
+        </div>
+        <button type="button" className="btn btn--sm" aria-label="検索とセッション絞込をリセット" onClick={resetSessionFilters}>検索とセッション絞込をリセット</button>
+        {visibleSessions.length === 0 ? <p>{data.sessions.length ? '条件に一致するセッションはありません。' : '収集範囲内に表示可能なセッションはありません。'}</p> : null}
+        <ul className="grid gap-3 text-sm md:grid-cols-2">{visibleSessions.map(session => <li className="min-w-0 rounded border border-border p-3" key={session.id}>
+          <SessionDescription value={session} />
+          <p className="mt-2 break-words">{tools[session.tool]} · {session.host ?? '端末未報告'} · {showTime(session.updatedAt)} · <FreshnessLabel value={session.freshness} /></p>
+          <p className="text-xs text-muted">{session.linked ? '登録タスクと関連あり（実行履歴を参照）' : 'タスクとの関係は未確認'}</p>
+        </li>)}</ul>
+      </section>
+      {data.tasks.length > 0 ? <section className="space-y-3" aria-label="登録タスク">
+        <h2 className="font-semibold">登録タスク</h2>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="grid gap-1 text-sm">タスクの状態で絞込（登録タスクのみに適用）
+            <select className="rounded border border-border bg-transparent p-2" aria-label="登録タスクの状態" value={statusFilter} onChange={event => setStatusFilter(event.target.value)}>
+              <option value="all">すべて</option>
+              {Object.entries(statuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </label>
+          <p className="text-sm text-muted" role="status">{visibleTasks.length} / {data.tasks.length} タスクを表示</p>
+        </div>
+        {visibleTasks.length === 0 ? <p>条件に一致するタスクはありません。</p> : null}
       {visibleTasks.map(task => {
         const attempts = data.executions.filter(execution => execution.taskId === task.id);
         const children = data.tasks.filter(child => child.parentTaskId === task.id);
@@ -144,15 +193,7 @@ export function TasksPage() {
           </details>
         </article>;
       })}
-      <section className="panel space-y-2 p-4" aria-label="未ひも付けセッション">
-        <h2 className="font-semibold">未ひも付けセッション（{orphans.length}）</h2>
-        <p className="text-sm text-muted">タスクとの関係が未確認です。セッションの存在だけでは実行中とは判断しません。</p>
-        {query ? <p className="text-xs text-muted">{orphans.length} / {allOrphans.length} セッションが検索条件に一致</p> : null}
-        <ul className="space-y-3 text-sm">{orphans.map(session => <li className="rounded border border-border p-3" key={session.id}>
-          <SessionDescription value={session} />
-          <p className="mt-2">{tools[session.tool]} · {session.host ?? '端末不明'} · {showTime(session.updatedAt)} · <FreshnessLabel value={session.freshness} /></p>
-        </li>)}</ul>
-      </section>
+      </section> : null}
     </> : null}
   </div>;
 }

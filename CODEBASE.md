@@ -49,6 +49,8 @@ Keep this overview synchronized when module boundaries, scripts, architecture or
 
 `server/tasks/`は外部providerが生成した汎用JSONを検証し、既存認証middleware配下の`GET /api/tasks`へ投影する。既定は無効でprovider I/Oは発生しない。`src/components/TasksPage/`は`/tasks`の読み取り専用画面。端末・推論先は別名化し、task/execution/session IDを区別する。モデルの報告値・設定値、状態の観測・報告・記録を区別する。feedの実データは全Git checkout/worktree外の非公開runtimeに置く。契約と境界・切戻しはREADMEのTasks節を参照。公開CIは架空fixtureのみで検証し、runtime artifactをアップロードしない。
 
-Sessionは任意のtitle/purposeと説明の根拠・元時刻を持てる。説明は承認されたsnapshotとして表示し、状態や進捗へ変換しない。省略は説明未報告、時刻nullは鮮度不明を維持する。未ひも付けSessionの説明も一覧検索の対象に含む。
+Sessionは任意のtitle/purposeと説明の根拠・元時刻を持てる。説明は承認されたsnapshotとして表示し、状態や進捗へ変換しない。省略は説明未報告、時刻nullは鮮度不明を維持する。関連有無を問わず全Sessionを主一覧に表示し、説明も全体検索の対象に含む。
 
 Sessionの任意workContextは承認済み作業リポジトリ・タスク名・参照番号と根拠・元時刻を表示する。未知値を維持し、canonical Taskを生成しない。関連/未ひも付けSessionの作業情報は検索対象。
+
+Session一覧はリポジトリ・ツール・端末をANDで絞り込む。検索は登録Taskとも共通、状態の絞込は登録Task節だけに適用する。選択は再取得後も保持し、認証変更時には全検索・絞込値を破棄する。未報告値は実際の文字列と区別し、選択値が一覧から消えても解除可能に保つ。
