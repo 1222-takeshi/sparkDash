@@ -28,6 +28,26 @@ function timestamp(value, now) {
   if (new Date(value).toISOString() !== (value.includes('.') ? value : value.replace('Z', '.000Z'))) invalid();
   return value;
 }
+function workContext(value, now) {
+  if (value === null) return null;
+  object(value, ['repository', 'taskName', 'taskRef', 'basis', 'updatedAt']);
+  const repository = nullable(value.repository, label => {
+    text(label);
+    if (/[:@\\~]/u.test(label) || label.startsWith('/') || label.split('/').length > 2 || label.split('/').some(part => !part.trim() || part === '.' || part === '..')) invalid();
+    return label;
+  });
+  const taskName = nullable(value.taskName, label => text(label));
+  const taskRef = nullable(value.taskRef, ref => {
+    text(ref, 64);
+    if (!/^(?:#[1-9][0-9]*|[A-Z][A-Z0-9]*-[1-9][0-9]*)$/.test(ref)) invalid();
+    return ref;
+  });
+  const basis = choice(value.basis, ['reported', 'reviewed', 'unknown']);
+  const updatedAt = timestamp(value.updatedAt, now);
+  const unknown = repository === null && taskName === null && taskRef === null;
+  if (unknown !== (basis === 'unknown') || (unknown && updatedAt !== null)) invalid();
+  return { repository, taskName, taskRef, basis, updatedAt };
+}
 const freshness = (stamp, now) => stamp === null ? 'unknown' : now - Date.parse(stamp) > STALE_MS ? 'stale' : 'fresh';
 function rows(value, max = 500) { if (!Array.isArray(value) || value.length > max) invalid(); return value; }
 function unique(items) { const ids = new Set(items.map(v => v.id)); if (ids.size !== items.length) invalid(); return ids; }
@@ -73,14 +93,14 @@ export function projectFeed(feed, now = Date.now()) {
     }
   }
   const sessions = rows(feed.sessions).map(row => {
-    object(row, ['id', 'tool', 'hostRef', 'updatedAt'], ['title', 'purpose', 'purposeBasis', 'purposeUpdatedAt']);
+    object(row, ['id', 'tool', 'hostRef', 'updatedAt'], ['title', 'purpose', 'purposeBasis', 'purposeUpdatedAt', 'workContext']);
     const updatedAt = timestamp(row.updatedAt, now);
     const title = nullable(Object.hasOwn(row, 'title') ? row.title : null, value => text(value));
     const purpose = nullable(Object.hasOwn(row, 'purpose') ? row.purpose : null, value => text(value, 500));
     const purposeBasis = choice(Object.hasOwn(row, 'purposeBasis') ? row.purposeBasis : 'unknown', ['manual', 'reviewed-summary', 'unknown']);
     const purposeUpdatedAt = timestamp(Object.hasOwn(row, 'purposeUpdatedAt') ? row.purposeUpdatedAt : null, now);
     if ((purpose === null) !== (purposeBasis === 'unknown') || (purpose === null && purposeUpdatedAt !== null)) invalid();
-    return { id: id(row.id), tool: choice(row.tool, TOOLS), host: alias(row.hostRef, hosts), updatedAt, freshness: freshness(updatedAt, now), linked: false, title, purpose, purposeBasis, purposeUpdatedAt };
+    return { id: id(row.id), tool: choice(row.tool, TOOLS), host: alias(row.hostRef, hosts), updatedAt, freshness: freshness(updatedAt, now), linked: false, title, purpose, purposeBasis, purposeUpdatedAt, workContext: workContext(Object.hasOwn(row, 'workContext') ? row.workContext : null, now) };
   });
   const sessionIds = unique(sessions);
   const executions = rows(feed.executions, 1000).map(row => {

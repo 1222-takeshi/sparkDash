@@ -1360,7 +1360,7 @@ Codex / Claude Code / Local LLMなどのタスク、親子関係、実行履歴�
 
 ### feed v1契約
 
-`executions[].sessionIds`とSessionの説明欄（`title`、`purpose`、`purposeBasis`、`purposeUpdatedAt`）以外の全キーは必須です。不明は`null`または列挙値`unknown`にします。未定義のキーが1つでもあればfeed全体を拒否します。
+`executions[].sessionIds`とSessionの説明欄（`title`、`purpose`、`purposeBasis`、`purposeUpdatedAt`、`workContext`）以外の全キーは必須です。不明は`null`または列挙値`unknown`にします。未定義のキーが1つでもあればfeed全体を拒否します。
 `displayApproved: true`は、**全表示値を監視画面に出すことを送信側が審査・明示許可した宣言**です。
 この宣言自体は秘密検知器ではありません。任意の秘密が通常のタスク名、モデル名、ID、summaryとして入ることをregexで完全検出することはできません。
 providerは自由文を自動転載せず、承認したtitle/summary/stage/modelの値だけを選択してください。
@@ -1417,3 +1417,11 @@ providerは自由文を自動転載せず、承認したtitle/summary/stage/mode
 GitHubのSynthetic tests workflowはGitHub-hosted runnerで同じ検証を行い、runtime artifactを保存しません。
 切戻しは`SPARKDASH_TASKS_ENABLED`を解除（または`0`）してサーバーを再起動します。既存監視機能の設定変更は不要です。
 画面に非表示になってもprovider側の実データは残ります。providerの保持・廃棄・秘密値の扱いは非公開側の運用責任です。
+
+### Sessionの作業リポジトリとタスク名
+
+任意の`workContext`は省略/null、または`{repository, taskName, taskRef, basis, updatedAt}`です。repositoryは承認済み別名またはowner/repo表示名、taskNameは承認済みタスク名（それぞれ160 UTF-16 code units以内）。repositoryは絶対パス、URL、コロン・@・バックスラッシュ・~、3段以上のパス、空やdotの区間を拒否します。taskRefはnullまたは`#42`/`DEMO-7`形式（64以内）です。空白のみ・制御文字は禁止です。各内容は独立してnullにでき、未知のタスクをリポジトリから補いません。
+
+basisは`reported`（報告値）、`reviewed`（リポジトリとタスクの対応を確認済み）、`unknown`です。全内容nullの場合はunknownかつupdatedAt:nullが必要です。既知のbasisは少なくとも1内容が必要です。updatedAtは情報の元のUTC確認時刻またはnullで、session/list更新時刻から補いません。作業ディレクトリだけからタスク対象リポジトリを断定せず、prompt・git remote・branchは収集しません。これらの構文制限は任意の秘密文字列の検出を保証しないため、送信側の表示承認が必要です。
+
+例: `{"repository":"demo-owner/demo-repo","taskName":"Review synthetic parser","taskRef":"DEMO-7","basis":"reviewed","updatedAt":null}`。画面では作業リポジトリとタスク名を併記し、関連/未ひも付けSessionの作業情報を検索できます。Task/Executionの生成・状態変更は行いません。旧consumerへ戻す際はproducerのworkContext出力を止めます。

@@ -12,7 +12,12 @@ export interface TaskExecution extends Updated {
   provider: string | null; host: string | null; status: TaskStatus;
   statusBasis: 'reported' | 'observed' | 'recorded' | 'unknown'; startedAt: string | null;
 }
+export interface SessionWorkContext {
+  repository: string | null; taskName: string | null; taskRef: string | null;
+  basis: 'reported' | 'reviewed' | 'unknown'; updatedAt: string | null;
+}
 export interface TaskSession extends Updated {
+  workContext?: SessionWorkContext | null;
   id: string; tool: TaskTool; host: string | null; linked: boolean;
   title?: string | null; purpose?: string | null;
   purposeBasis?: 'manual' | 'reviewed-summary' | 'unknown'; purposeUpdatedAt?: string | null;
